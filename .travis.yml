@@ -6,6 +6,12 @@ android:
     # - platform-tools
     # - tools
 
+    # Extra components needed
+    - extra-android-support
+    - extra-google-google_play_services
+    - extra-android-m2repository
+    - extra-google-m2repository
+
     # The BuildTools version used by your project
     - build-tools-22.0.1
 
@@ -15,3 +21,6 @@ android:
     # Specify at least one system image,
     # if you need to run emulator(s) during your tests
     - sys-img-armeabi-v7a-android-17
+
+  licenses:
+    - '.+'

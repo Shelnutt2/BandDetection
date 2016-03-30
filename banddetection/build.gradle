@@ -25,7 +25,7 @@ android {
 
 def siteUrl = 'https://github.com/Shelnutt2/BandDetection'        // Homepage URL of the library
 def gitUrl = 'https://github.com/Shelnutt2/BandDetection.git'     // Git repository URL
-group = "nu.shel.banddection"                                     // Maven Group ID for the artifact
+group = "nu.shel.banddetection"                                     // Maven Group ID for the artifact
 
 
 install {
