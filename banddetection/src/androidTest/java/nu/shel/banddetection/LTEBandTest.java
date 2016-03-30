@@ -1,12 +1,14 @@
 package nu.shel.banddetection;
 
+import junit.framework.TestCase;
+
 import org.junit.Test;
 
 import static nu.shel.banddetection.LTEBand.GetBandFromEarfcn;
 import static org.hamcrest.core.Is.is;
 import static org.junit.Assert.assertThat;
 
-public class LTEBandTest {
+public class LTEBandTest extends TestCase{
 
     @Test
     public void GetBandFromEarfcn_returnsBand41() {

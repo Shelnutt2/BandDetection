@@ -7,9 +7,9 @@ package nu.shel.banddetection;
  * @since 3/30/2016
  */
 public class LTEBand {
-    int band;
-    double upload_frequency_lower_bound, upload_frequency_upper_bound, download_frequency_lower_bound, download_frequency_upper_bound;
-    double upload_frequency_offset, download_frequency_offset;
+    public int band;
+    private double upload_frequency_lower_bound, upload_frequency_upper_bound, download_frequency_lower_bound, download_frequency_upper_bound;
+    private double upload_frequency_offset, download_frequency_offset;
 
     /** Constructor to create LTEBand object
      *
