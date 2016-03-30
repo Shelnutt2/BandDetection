@@ -1,28 +1,9 @@
 apply plugin: 'com.android.library'
+apply plugin: 'com.github.dcendents.android-maven'
+apply plugin: 'com.jfrog.bintray'
 
-ext {
-    bintrayRepo = 'maven'
-    bintrayName = 'BandDetection'
-
-    publishedGroupId = 'nu.shel.banddetection'
-    libraryName = 'BandDetection'
-    artifact = 'BandDetection'
-
-    libraryDescription = 'A library for detecting band for qualcomm devices'
-
-    siteUrl = 'https://github.com/Shelnutt2/BandDetection'
-    gitUrl = 'https://github.com/Shelnutt2/BandDetection.git'
-
-    libraryVersion = '0.0.1'
-
-    developerId = 'Shelnutt2'
-    developerName = 'Seth Shelnutt'
-    developerEmail = 'Shelnutt2@gmail.com'
-
-    licenseName = 'GNU General Public License, version 2'
-    licenseUrl = 'https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt'
-    allLicenses = ["GPL-2.0"]
-}
+// This is the library version used when deploying the artifact
+version = "0.0.1"
 
 android {
     compileSdkVersion 23
@@ -32,12 +13,53 @@ android {
         minSdkVersion 17
         targetSdkVersion 23
         versionCode 1
-        versionName "0.0.1"
+        versionName version
     }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+def siteUrl = 'https://github.com/Shelnutt2/BandDetection'        // Homepage URL of the library
+def gitUrl = 'https://github.com/Shelnutt2/BandDetection.git'     // Git repository URL
+group = "nu.shel.banddection"                                     // Maven Group ID for the artifact
+
+
+install {
+    repositories.mavenInstaller {
+        // This generates POM.xml with proper parameters
+        pom {
+            project {
+                packaging 'aar'
+
+                // Add your description here
+                name 'Detect LTE band for Qualcomm Android Devices'
+                url siteUrl
+
+                // Set your license
+                licenses {
+                    license {
+                        name 'GNU Lesser General Public License, Version 2.1'
+                        url 'https://www.gnu.org/licenses/lgpl-2.1.txt'
+                    }
+                }
+                developers {
+                    developer {
+                        id 'Shelnutt2'
+                        name 'Seth Shelnutt'
+                        email 'Shelnutt2@gmail.com'
+                    }
+                }
+                scm {
+                    connection gitUrl
+                    developerConnection gitUrl
+                    url siteUrl
+
+                }
+            }
         }
     }
 }
@@ -49,6 +71,48 @@ dependencies {
     androidTestCompile 'junit:junit:4.12'
 }
 
-// Place it at the end of the file
-apply from: 'https://raw.githubusercontent.com/nuuneoi/JCenter/master/installv1.gradle'
-apply from: 'https://raw.githubusercontent.com/nuuneoi/JCenter/master/bintrayv1.gradle'
+task sourcesJar(type: Jar) {
+    from android.sourceSets.main.java.srcDirs
+    classifier = 'sources'
+}
+
+task javadoc(type: Javadoc) {
+    source = android.sourceSets.main.java.srcDirs
+    classpath += project.files(android.getBootClasspath().join(File.pathSeparator))
+}
+
+task javadocJar(type: Jar, dependsOn: javadoc) {
+    classifier = 'javadoc'
+    from javadoc.destinationDir
+}
+artifacts {
+    archives javadocJar
+    archives sourcesJar
+}
+
+Properties properties = new Properties()
+if(project.rootProject.file('local.properties').exists())
+    properties.load(project.rootProject.file('local.properties').newDataInputStream())
+
+bintray {
+    user = properties.getProperty("bintray.user")
+    key = properties.getProperty("bintray.apikey")
+    key = properties.getProperty("bintray.apikey")
+
+    configurations = ['archives']
+    pkg {
+        repo = "maven"
+        name = "Band Detection"
+        websiteUrl = siteUrl
+        vcsUrl = gitUrl
+        licenses = ["LGPL-2.1"]
+        publish = true
+        version {
+            gpg {
+                sign = true //Determines whether to GPG sign the files. The default is false
+                passphrase = properties.getProperty("bintray.gpg.password")
+                //Optional. The passphrase for GPG signing'
+            }
+        }
+    }
+}
