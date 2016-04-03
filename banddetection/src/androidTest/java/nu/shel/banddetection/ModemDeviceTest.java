@@ -39,6 +39,10 @@ public class ModemDeviceTest {
     @Test
     public void runCommand() {
 
+        while(mModem.lastReturnStatus == null){
+
+        }
+        assertThat(mModem.lastReturnStatus, is(Modem.returnCodes.SERIAL_INIT_OK));
         ArrayList<String> output = mModem.RunModemCommand("AT");
         assertThat(mModem.lastReturnStatus, is(Modem.returnCodes.COMMAND_SUCCESS));
         assertThat(output.isEmpty(),is(false));
