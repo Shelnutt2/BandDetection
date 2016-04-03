@@ -22,7 +22,7 @@ public class BandDetection {
     private static String TAG = "BandDetection";
     public static LTEBand DetectBand(){
         Modem mModem = new Modem();
-        while(mModem.lastReturnStatus == null){
+        while(mModem.lastReturnStatus == null || mModem.path == null){
 
         }
         ArrayList<String> output = mModem.RunModemCommand("AT\\$QCRSRP?");
@@ -30,7 +30,7 @@ public class BandDetection {
             if(!output.isEmpty()){
                 Log.d(TAG, "DetectBand: " + output.get(0));
                 String[] splitString = output.get(0).split(",");
-                if(splitString.length > 0) {
+                if(splitString.length > 1) {
                     String earfcn = splitString[1];
                     return GetBandFromEarfcn(Double.parseDouble(earfcn));
                 }
