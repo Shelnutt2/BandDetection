@@ -1,10 +1,12 @@
 package nu.shel.banddetection;
 
 /**
+ * LTEBand
  * Created by Seth Shelnutt on 3/30/16.
  * This work was inspired by https://github.com/richliu/earfcn2freq
  * @author Seth Shelnutt
  * @since 3/30/2016
+ * This file is copyrighted By Seth Shelnutt and licensed under terms of the LGPL v2.
  */
 public class LTEBand {
     public int band;
