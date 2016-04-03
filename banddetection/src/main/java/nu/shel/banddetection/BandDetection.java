@@ -28,11 +28,14 @@ public class BandDetection {
         ArrayList<String> output = mModem.RunModemCommand("AT\\$QCRSRP?");
         if(mModem.lastReturnStatus == Modem.returnCodes.COMMAND_SUCCESS){
             if(!output.isEmpty()){
-                Log.d(TAG, "DetectBand: " + output.get(0));
-                String[] splitString = output.get(0).split(",");
-                if(splitString.length > 1) {
-                    String earfcn = splitString[1];
-                    return GetBandFromEarfcn(Double.parseDouble(earfcn));
+                for (String line:output) {
+                    Log.d(TAG, "DetectBand: " + line);
+                    String[] splitString = line.split(",");
+                    if(splitString.length > 1) {
+                        String earfcn = splitString[1];
+                        Log.d(TAG, "DetectBand: earfcn: " + earfcn);
+                        return GetBandFromEarfcn(Double.parseDouble(earfcn));
+                    }
                 }
             }
         }
