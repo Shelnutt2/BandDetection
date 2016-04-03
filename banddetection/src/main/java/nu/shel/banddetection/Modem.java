@@ -3,12 +3,15 @@ package nu.shel.banddetection;
 import android.util.Log;
 
 import com.stericson.RootShell.RootShell;
+import com.stericson.RootShell.exceptions.RootDeniedException;
 import com.stericson.RootShell.execution.Command;
 import com.stericson.RootTools.RootTools;
 
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Created by seth on 3/31/16.
@@ -24,9 +27,13 @@ public class Modem {
     enum returnCodes {
         ROOT_UNAVAILABLE, //Roottools can not find root
         SERIAL_INIT_OK, //Serial device detected fine
-        NO_SERIAL_DEVICE //No serial device found
+        NO_SERIAL_DEVICE, //No serial device found
+        COMMAND_FAILED,
+        COMMAND_SUCCESS,
 
     }
+
+    private long defaultTimeout = 5000;
 
     public String path; //Path where modem block device is located
 
@@ -34,6 +41,117 @@ public class Modem {
 
     public Modem() {
         findSerialDevice();
+    }
+
+    /** Run a given command on the modem serial device, will retry on no-response
+     *
+     * @param command String of command to run
+     * @return ArrayList of lines returned.
+     */
+    public ArrayList<String> RunModemCommand(final String command) {
+        return RunModemCommand(command, true, defaultTimeout);
+    }
+
+    /** Run a given command on the modem serial device
+     *
+     * @param command String of command to run
+     * @param retry Retry command on no response
+     * @param timeout When should given command timeout without complete response
+     * @return Arraylist of lines returned.
+     */
+    public ArrayList<String> RunModemCommand(final String command, final boolean retry, final long timeout) {
+        // Reset last return to signal command is running
+        lastReturnStatus = null;
+
+        final ArrayList<String> output = new ArrayList<>();
+        RootTools.debugMode=true;
+
+        // Run in a thread so we can sleep while we wait for possible ls command to finish
+        new Thread(new Runnable() {
+            public void run() {
+
+                // Check for root access
+                boolean root = RootShell.isAccessGiven();
+                if(!root) {
+                    lastReturnStatus = returnCodes.ROOT_UNAVAILABLE;
+                }
+
+                try {
+                    // First we setup a listener
+                    Log.d(TAG, "Listening for modem command output");
+                    Log.d(TAG, "Running: " + "cat " + path);
+                    Command listen = new Command(10, "cat " + path) {
+                        @Override
+                        public void commandOutput(int id, String line) {
+                            Log.d(TAG, "commandOutput: " + line);
+                            output.add(line);
+                            super.commandOutput(id, line);
+                        }
+
+                        @Override
+                        public void commandTerminated(int id, String reason) {
+                            super.commandTerminated(id, reason);
+                        }
+
+                        @Override
+                        public void commandCompleted(int id, int exitcode) {
+                            super.commandCompleted(id, exitcode);
+                        }
+                    };
+                    RootTools.getShell(true).add(listen);
+
+                    // Next we run the command
+                    String runString = "echo -e \""+command+"\\r\" >"+path;
+                    Log.d(TAG, "Running: " + runString);
+                    Command run = new Command(0, runString);
+                    RootTools.getShell(true).add(run);
+
+                    // Wait for response from modem, look for OK/ERROR or timeout
+                    long currentTime = System.currentTimeMillis();
+                    while((output.isEmpty() || (!output.get(output.size() - 1).equals("OK") && !output.get(output.size() - 1).equals("ERROR"))) && System.currentTimeMillis() - currentTime < timeout){
+                        try {
+                            Thread.sleep(500);
+                            if(retry) { //If retry is enable, run command again
+                                Log.d(TAG, "No response, rerunning command..: " + runString);
+                                RootTools.getShell(true).add(run);
+                                while (!run.isFinished()) {
+                                    try {
+                                        // Sleep for 50 milliseconds while we wait for command to finish
+                                        Thread.sleep(50);
+                                    } catch (InterruptedException e) {
+                                        Log.e(TAG, "Unable to wait for " + runString + " to finish. " + e);
+                                    }
+                                }
+                            }
+                        } catch (InterruptedException e) {
+                            Log.e(TAG, "Unable to wait for listener to get results. " + e);
+                        }
+                    }
+                    listen.finish();
+                } catch (RootDeniedException e) {
+                    Log.e(TAG, "RunModemCommand: " + e.toString());
+                } catch (TimeoutException | IOException e) {
+                    Log.e(TAG, "RunModemCommand: " + command + " " + e.toString());
+                }
+            }
+
+        }).run();
+
+        if(!output.isEmpty()) {
+            //The first line should equal the command run
+            if (output.get(0).equals(command))
+                output.remove(0);
+            //The last line should say OK to indicate command run successfully
+            if (output.get(output.size() - 1).equals("OK")) {
+                output.remove(output.size() - 1);
+                lastReturnStatus = returnCodes.COMMAND_SUCCESS;
+            } else {
+                lastReturnStatus = returnCodes.COMMAND_FAILED;
+            }
+        } else {
+            lastReturnStatus = returnCodes.COMMAND_FAILED;
+        }
+        return output;
     }
 
     /**
@@ -71,7 +189,7 @@ public class Modem {
 
                      try {
                          // Use SystemProperties class to get rild.libargs setting
-                         Class clazz = null;
+                         Class clazz;
                          clazz = Class.forName("android.os.SystemProperties");
                          Method method = clazz.getDeclaredMethod("get", String.class);
                          String device = (String) method.invoke(null, "rild.libargs");

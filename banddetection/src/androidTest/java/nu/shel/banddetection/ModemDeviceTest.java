@@ -7,6 +7,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.util.ArrayList;
+
 import static org.hamcrest.core.Is.is;
 import static org.junit.Assert.assertThat;
 
@@ -32,6 +34,15 @@ public class ModemDeviceTest {
         }
         assertThat(mModem.lastReturnStatus, is(Modem.returnCodes.SERIAL_INIT_OK));
         assertThat(mModem.path, is("/dev/smd0"));
+    }
+
+    @Test
+    public void runCommand() {
+
+        ArrayList<String> output = mModem.RunModemCommand("AT");
+        assertThat(mModem.lastReturnStatus, is(Modem.returnCodes.COMMAND_SUCCESS));
+        assertThat(output.isEmpty(),is(false));
+        assertThat(output.get(0),is(""));
     }
 
 }
