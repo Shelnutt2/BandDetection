@@ -60,6 +60,11 @@ public class Modem {
      * @return Arraylist of lines returned.
      */
     public ArrayList<String> RunModemCommand(final String command, final boolean retry, final long timeout) {
+        if(this.path == null || this.path.isEmpty()) {
+            Log.e(TAG, "RunModemCommand: Trying to run command without path! Aborting");
+            return new ArrayList<>();
+        }
+
         // Reset last return to signal command is running
         lastReturnStatus = null;
 
@@ -84,7 +89,8 @@ public class Modem {
                         @Override
                         public void commandOutput(int id, String line) {
                             Log.d(TAG, "commandOutput: " + line);
-                            output.add(line);
+                            if(output.isEmpty() || (!output.get(output.size() -1 ).equals("OK") && !output.get(output.size() -1 ).equals("ERROR")))
+                                output.add(line);
                             super.commandOutput(id, line);
                         }
 
@@ -100,34 +106,43 @@ public class Modem {
                     };
                     RootTools.getShell(true).add(listen);
 
-                    // Next we run the command
-                    String runString = "echo -e \""+command+"\\r\" >"+path;
-                    Log.d(TAG, "Running: " + runString);
-                    Command run = new Command(0, runString);
-                    RootTools.getShell(true).add(run);
+                    if(listen.isFinished()){
+                        Log.e(TAG, "RunModemCommand: Could not listen to serial device, " + path);
+                    } else {
+                        // Next we run the command
+                        String runString = "echo -e \"" + command + "\\r\" >" + path;
+                        Log.d(TAG, "Running: " + runString);
+                        Command run = new Command(0, runString);
+                        RootTools.getShell(true).add(run);
 
-                    // Wait for response from modem, look for OK/ERROR or timeout
-                    long currentTime = System.currentTimeMillis();
-                    while((output.isEmpty() || (!output.get(output.size() - 1).equals("OK") && !output.get(output.size() - 1).equals("ERROR"))) && System.currentTimeMillis() - currentTime < timeout){
-                        try {
-                            Thread.sleep(500);
-                            if(retry) { //If retry is enable, run command again
-                                Log.d(TAG, "No response, rerunning command..: " + runString);
-                                RootTools.getShell(true).add(run);
-                                while (!run.isFinished()) {
-                                    try {
-                                        // Sleep for 50 milliseconds while we wait for command to finish
-                                        Thread.sleep(50);
-                                    } catch (InterruptedException e) {
-                                        Log.e(TAG, "Unable to wait for " + runString + " to finish. " + e);
+                        // Wait for response from modem, look for OK/ERROR or timeout
+                        long currentTime = System.currentTimeMillis();
+                        while ((output.isEmpty() || (!output.get(output.size() - 1).equals("OK") && !output.get(output.size() - 1).equals("ERROR"))) && System.currentTimeMillis() - currentTime < timeout) {
+                            if(listen.isFinished()) {
+                                Log.e(TAG, "RunModemCommand: Could not listen to serial device");
+                                break;
+                            }
+                            try {
+                                Thread.sleep(500);
+                                if (retry) { //If retry is enable, run command again
+                                    Log.d(TAG, "No response, rerunning command..: " + runString);
+                                    run.terminate();
+                                    RootTools.getShell(true).add(run);
+                                    while (!run.isFinished()) {
+                                        try {
+                                            // Sleep for 50 milliseconds while we wait for command to finish
+                                            Thread.sleep(50);
+                                        } catch (InterruptedException e) {
+                                            Log.e(TAG, "Unable to wait for " + runString + " to finish. " + e);
+                                        }
                                     }
                                 }
+                            } catch (InterruptedException e) {
+                                Log.e(TAG, "Unable to wait for listener to get results. " + e);
                             }
-                        } catch (InterruptedException e) {
-                            Log.e(TAG, "Unable to wait for listener to get results. " + e);
                         }
+                        listen.terminate();
                     }
-                    listen.finish();
                 } catch (RootDeniedException e) {
                     Log.e(TAG, "RunModemCommand: " + e.toString());
                 } catch (TimeoutException | IOException e) {
@@ -146,9 +161,11 @@ public class Modem {
                 output.remove(output.size() - 1);
                 lastReturnStatus = returnCodes.COMMAND_SUCCESS;
             } else {
+                Log.d(TAG, "RunModemCommand: Output did not end in OK");
                 lastReturnStatus = returnCodes.COMMAND_FAILED;
             }
         } else {
+            Log.d(TAG, "RunModemCommand: Output is empty");
             lastReturnStatus = returnCodes.COMMAND_FAILED;
         }
         return output;
@@ -160,9 +177,13 @@ public class Modem {
      * @param path Serial device to test for modem access
      * @return Boolean for if modem is usable
      */
-    //TODO: This needs to be implemented
     private boolean testSerialDevice(String path){
-        return path.equals("/dev/smd0");
+        Log.d(TAG, "testSerialDevice: Testing " + path);
+        String previousPath = this.path; // Save previous path
+        this.path = path; // Set path for running test commands
+        ArrayList<String> output = RunModemCommand("AT"); // AT should should an empty set
+        this.path = previousPath; // Set path back to previous path
+        return !output.isEmpty() && output.get(0).equals("");
     }
 
     /**
@@ -238,19 +259,22 @@ public class Modem {
                              }
 
                          }
+                         // Test all possible serial devices
+                         for (String mDevice : mSerialDevices) {
+                             Log.d(TAG, "findSerialDevice: Possible device - " + mDevice);
+                             if(testSerialDevice(mDevice)) {
+                                 path = mDevice;
+                                 lastReturnStatus = returnCodes.SERIAL_INIT_OK;
+                                 break;
+                             } else {
+                                 lastReturnStatus = returnCodes.NO_SERIAL_DEVICE;
+                             }
+                         }
+                     } else {
+                         path = mSerialDevices.get(0);
+                         lastReturnStatus = returnCodes.SERIAL_INIT_OK;
                      }
 
-                     // Test all possible serial devices
-                     for (String mDevice : mSerialDevices) {
-                         Log.d(TAG, "findSerialDevice: Possible device - " + mDevice);
-                         if(testSerialDevice(mDevice)) {
-                             path = mDevice;
-                             lastReturnStatus = returnCodes.SERIAL_INIT_OK;
-                             break;
-                         } else {
-                             lastReturnStatus = returnCodes.NO_SERIAL_DEVICE;
-                         }
-                     }
                  } catch( Exception e ) {
                      Log.e("InitSerialDevice ", e.toString());
                  }
