@@ -137,8 +137,8 @@ public class Modem {
                                     RootTools.getShell(true).add(run);
                                     while (!run.isFinished()) {
                                         try {
-                                            // Sleep for 50 milliseconds while we wait for command to finish
-                                            Thread.sleep(50);
+                                            // Sleep for 500 milliseconds while we wait for command to finish
+                                            Thread.sleep(500);
                                         } catch (InterruptedException e) {
                                             Log.e(TAG, "Unable to wait for " + runString + " to finish. " + e);
                                         }
@@ -161,8 +161,16 @@ public class Modem {
 
         if(!output.isEmpty()) {
             //The first line should equal the command run
-            if (output.get(0).equals(command))
+            if (output.get(0).equals(command)) {
+                Log.d(TAG, "RunModemCommand: Removing first line. " + output.get(0));
                 output.remove(0);
+            }
+            if (output.get(0).contains(":")){
+                String line = output.get(0);
+                Log.d(TAG, "RunModemCommand: " + line.substring(line.indexOf(": ")));
+                output.set(0, line.substring(line.indexOf(":")));
+            }
+
             //The last line should say OK to indicate command run successfully
             if (output.get(output.size() - 1).equals("OK")) {
                 output.remove(output.size() - 1);
