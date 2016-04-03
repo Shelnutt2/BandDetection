@@ -27,6 +27,7 @@ import java.util.concurrent.TimeoutException;
 public class Modem {
 
     private String TAG = "Modem";
+    private ArrayList<String> output = new ArrayList<>();
 
     /**
      * Return Codes for modem class
@@ -40,7 +41,7 @@ public class Modem {
 
     }
 
-    private long defaultTimeout = 5000;
+    private int defaultTimeout = 5000;
 
     public String path; //Path where modem block device is located
 
@@ -64,130 +65,140 @@ public class Modem {
      * @param command String of command to run
      * @param retry Retry command on no response
      * @param timeout When should given command timeout without complete response
-     * @return Arraylist of lines returned.
+     * @return ArrayList of lines returned.
      */
-    public ArrayList<String> RunModemCommand(final String command, final boolean retry, final long timeout) {
-        if(this.path == null || this.path.isEmpty()) {
-            Log.e(TAG, "RunModemCommand: Trying to run command without path! Aborting");
-            return new ArrayList<>();
-        }
+    public ArrayList<String> RunModemCommand(final String command, final boolean retry, final int timeout) {
+        synchronized(Modem.class) {
+            if (this.path == null || this.path.isEmpty()) {
+                Log.e(TAG, "RunModemCommand: Trying to run command without path! Aborting");
+                return new ArrayList<>();
+            }
 
-        // Reset last return to signal command is running
-        lastReturnStatus = null;
+            // Reset last return to signal command is running
+            lastReturnStatus = null;
 
-        final ArrayList<String> output = new ArrayList<>();
-        RootTools.debugMode=true;
+            output.clear();
+            RootTools.debugMode = true;
 
-        // Check for root access
-        boolean root = RootShell.isAccessGiven();
-        if(!root) {
-            lastReturnStatus = returnCodes.ROOT_UNAVAILABLE;
-        }
+            // Check for root access
+            boolean root = RootTools.isAccessGiven();
+            if (!root) {
+                lastReturnStatus = returnCodes.ROOT_UNAVAILABLE;
+            }
 
-        try {
-            // First we setup a listener
-            Log.d(TAG, "Listening for modem command output");
-            Log.d(TAG, "Running: " + "cat " + path);
-            Command listen = new Command(10, "cat " + path) {
-                @Override
-                public void commandOutput(int id, String line) {
-                    Log.d(TAG, "commandOutput: " + line);
-                    if(output.isEmpty() || (!output.get(output.size() -1 ).equals("OK") && !output.get(output.size() -1 ).equals("ERROR")))
-                        output.add(line);
-                    super.commandOutput(id, line);
-                }
+            Command listen = null, run = null;
+            try {
+                // First we setup a listener
+                listen = setupListener(output, timeout);
 
-                @Override
-                public void commandTerminated(int id, String reason) {
-                    super.commandTerminated(id, reason);
-                }
+                if (listen == null || listen.isFinished()) {
+                    Log.e(TAG, "RunModemCommand: Could not listen to serial device, " + path);
+                } else {
+                    // Next we run the command
+                    String runString = "echo -e \"" + command + "\\r\" >" + path;
+                    Log.d(TAG, "Running: " + runString);
+                    run = new Command(0, runString);
+                    RootTools.getShell(true).add(run);
 
-                @Override
-                public void commandCompleted(int id, int exitcode) {
-                    super.commandCompleted(id, exitcode);
-                }
-            };
-            RootTools.getShell(true).add(listen);
-
-            if(listen.isFinished()){
-                Log.e(TAG, "RunModemCommand: Could not listen to serial device, " + path);
-            } else {
-                // Next we run the command
-                String runString = "echo -e \"" + command + "\\r\" >" + path;
-                Log.d(TAG, "Running: " + runString);
-                Command run = new Command(0, runString);
-                RootTools.getShell(true).add(run);
-
-                // Wait for response from modem, look for OK/ERROR or timeout
-                long currentTime = System.currentTimeMillis();
-                while ((output.isEmpty() || !capturedResults(command, output)) && System.currentTimeMillis() - currentTime < timeout) {
-                    if(listen.isFinished()) {
-                        Log.e(TAG, "RunModemCommand: Could not listen to serial device, " + path);
-                        break;
-                    }
-                    try {
-                        Thread.sleep(1000);
-                        if (retry) { //If retry is enable, run command again
-                            Log.d(TAG, "No response, rerunning command..: " + runString);
-                            run.terminate();
-                            RootTools.getShell(true).add(run);
-                            while (!run.isFinished()) {
-                                try {
-                                    // Sleep for 500 milliseconds while we wait for command to finish
-                                    Thread.sleep(1000);
-                                } catch (InterruptedException e) {
-                                    Log.e(TAG, "Unable to wait for " + runString + " to finish. " + e);
+                    // Wait for response from modem, look for OK/ERROR or timeout
+                    long currentTime = System.currentTimeMillis();
+                    while ((output.isEmpty() || !capturedResults(command, output)) && System.currentTimeMillis() - currentTime < timeout) {
+                        if (listen.isFinished()) {
+                            Log.e(TAG, "RunModemCommand: Could not listen to serial device, " + path);
+                            break;
+                        }
+                        try {
+                            Thread.sleep(1000);
+                            if (retry) { //If retry is enable, run command again
+                                Log.d(TAG, "No response, rerunning command..: " + runString);
+                                run.terminate();
+                                RootTools.getShell(true).add(run);
+                                while (!run.isFinished()) {
+                                    try {
+                                        // Sleep for 500 milliseconds while we wait for command to finish
+                                        Thread.sleep(1000);
+                                    } catch (InterruptedException e) {
+                                        Log.e(TAG, "Unable to wait for " + runString + " to finish. " + e);
+                                    }
                                 }
                             }
+                        } catch (InterruptedException e) {
+                            Log.e(TAG, "Unable to wait for listener to get results. " + e);
                         }
-                    } catch (InterruptedException e) {
-                        Log.e(TAG, "Unable to wait for listener to get results. " + e);
                     }
+                    run.terminate();
+                    listen.terminate();
                 }
-                listen.terminate();
-            }
-        } catch (RootDeniedException e) {
-            Log.e(TAG, "RunModemCommand: " + e.toString());
-        } catch (TimeoutException | IOException e) {
-            Log.e(TAG, "RunModemCommand: " + command + " " + e.toString());
-        }
-
-        if(!output.isEmpty()) {
-            //The first line should equal the command run
-            if (output.get(0).equals(command)) {
-                Log.d(TAG, "RunModemCommand: Removing first line. " + output.get(0));
-                output.remove(0);
-            }
-            if (output.get(0).contains(":")){
-                String line = output.get(0);
-                Log.d(TAG, "RunModemCommand: " + line.substring(line.indexOf(": ")));
-                output.set(0, line.substring(line.indexOf(":")));
+            } catch (RootDeniedException e) {
+                if(run != null)
+                    run.terminate();
+                if(listen != null)
+                    listen.terminate();
+                Log.e(TAG, "RunModemCommand: " + e.toString());
+            } catch (TimeoutException | IOException e) {
+                if(run != null)
+                    run.terminate();
+                if(listen != null)
+                    listen.terminate();
+                Log.e(TAG, "RunModemCommand: " + command + " " + e.toString());
             }
 
-            //The last line should say OK to indicate command run successfully
-            if (output.get(output.size() - 1).equals("OK")) {
-                output.remove(output.size() - 1);
-                lastReturnStatus = returnCodes.COMMAND_SUCCESS;
+            if (!output.isEmpty()) {
+                //The first line should equal the command run
+                if (output.get(0).equals(command)) {
+                    Log.d(TAG, "RunModemCommand: Removing first line. " + output.get(0));
+                    output.remove(0);
+                }
+                if (output.get(0).contains(":")) {
+                    String line = output.get(0);
+                    Log.d(TAG, "RunModemCommand without \":\": " + line.substring(line.indexOf(": ")));
+                    output.set(0, line.substring(line.indexOf(":")));
+                }
+
+                //The last line should say OK to indicate command run successfully
+                if (output.get(output.size() - 1).equals("OK")) {
+                    output.remove(output.size() - 1);
+                    lastReturnStatus = returnCodes.COMMAND_SUCCESS;
+                } else {
+                    Log.d(TAG, "RunModemCommand: Output did not end in OK");
+                    lastReturnStatus = returnCodes.COMMAND_FAILED;
+                }
             } else {
-                Log.d(TAG, "RunModemCommand: Output did not end in OK");
+                Log.d(TAG, "RunModemCommand: Output is empty for " + command);
                 lastReturnStatus = returnCodes.COMMAND_FAILED;
             }
-        } else {
-            Log.d(TAG, "RunModemCommand: Output is empty for " + command);
-            lastReturnStatus = returnCodes.COMMAND_FAILED;
+            // Close all open shells before we run the command, this prevents having two cats
+            try {
+                RootTools.closeAllShells();
+            } catch (IOException e) {
+                Log.e(TAG, "RunModemCommand: IOException on closeAllShells" + e.toString() );
+            }
+            return output;
         }
-        return output;
     }
 
     private boolean capturedResults(String command, ArrayList<String> output) {
         int startIndex = -1;
         int endIndex = -1;
+        String commandCleansed1 = command.replace("\\\\","");
+        String commandCleansed2 = command.replace("\\\\","").replace("AT\\$", "");
+        String commandCleansed3 = command.replace("\\\\","").replace("AT\\$", "").replace("?","");
+        String commandCleansed4 = command.replace("\\\\","").replace("AT\\$", "").replace("?","") + ":";
         for (int i = 0; i < output.size(); i++) {
             String line = output.get(i);
-            Log.d(TAG, "capturedResults: " + command.replace("\\\\",""));
-            if(line.contains(command.replace("\\\\",""))) {
+            Log.d(TAG, "capturedResults: " + commandCleansed1);
+            Log.d(TAG, "capturedResults2: " + commandCleansed2);
+            Log.d(TAG, "capturedResults3: " + commandCleansed3);
+            Log.d(TAG, "capturedResults4: " + commandCleansed4);
+            if(line.contains(commandCleansed1)) {
                 startIndex = i;
-            } else  if(i > startIndex && (line.equals("OK") || line.equals("ERROR"))) {
+            } else if(line.contains(commandCleansed2)) {
+                startIndex = i;
+            } else if(line.contains(commandCleansed3)) {
+                startIndex = i;
+            } else if(line.contains(commandCleansed4)) {
+                startIndex = i;
+            } else  if(startIndex > -1 && i > startIndex && (line.equals("OK") || line.equals("ERROR"))) {
                 endIndex = i;
                 break;
             }
@@ -306,4 +317,63 @@ public class Modem {
          if(lastReturnStatus != returnCodes.SERIAL_INIT_OK)
             lastReturnStatus = returnCodes.NO_SERIAL_DEVICE;
      }
+
+
+    /**
+     *
+     * @param output ArrayList to append to
+     * @return RootTools Command object
+     */
+    private Command setupListener(final ArrayList<String> output, int timeout) {
+        synchronized(Modem.class) {
+            if (this.path == null || this.path.isEmpty()) {
+                Log.e(TAG, "setupListener: Trying to setup listener without path! Aborting");
+                return null;
+            }
+
+            // Reset last return to signal command is running
+            lastReturnStatus = null;
+
+            // Listen command for serial device
+            Command listen = null;
+
+            // Check for root access
+            boolean root = RootShell.isAccessGiven();
+            if (!root) {
+                lastReturnStatus = returnCodes.ROOT_UNAVAILABLE;
+            }
+
+            try {
+                // First we setup a listener
+                Log.d(TAG, "Listening for modem command output");
+                Log.d(TAG, "setupListener: Running: " + "cat " + path);
+                listen = new Command(0, timeout, "cat " + path) {
+                    @Override
+                    public void commandOutput(int id, String line) {
+                        Log.d(TAG, "commandOutput: " + line);
+                        if (output.isEmpty() || (!output.get(output.size() - 1).equals("OK") && !output.get(output.size() - 1).equals("ERROR")))
+                            output.add(line);
+                        super.commandOutput(id, line);
+                    }
+
+                    @Override
+                    public void commandTerminated(int id, String reason) {
+                        super.commandTerminated(id, reason);
+                    }
+
+                    @Override
+                    public void commandCompleted(int id, int exitcode) {
+                        super.commandCompleted(id, exitcode);
+                    }
+                };
+                RootTools.getShell(true,timeout).add(listen);
+
+            } catch (RootDeniedException e) {
+                Log.e(TAG, "setupListener: " + e.toString());
+            } catch (TimeoutException | IOException e) {
+                Log.e(TAG, "setupListener:  " + e.toString());
+            }
+            return listen;
+        }
+    }
 }
