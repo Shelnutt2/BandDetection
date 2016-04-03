@@ -1,9 +1,13 @@
 apply plugin: 'com.android.library'
 apply plugin: 'com.github.dcendents.android-maven'
 apply plugin: 'com.jfrog.bintray'
+apply plugin: 'net.saliman.cobertura'
+apply plugin: 'com.github.kt3k.coveralls'
 
 // This is the library version used when deploying the artifact
 version = "0.9.0"
+
+cobertura.coverageFormats = ['html', 'xml'] // coveralls plugin depends on xml format report
 
 android {
     compileSdkVersion 23
