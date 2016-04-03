@@ -14,7 +14,14 @@ import java.util.List;
 import java.util.concurrent.TimeoutException;
 
 /**
- * Created by seth on 3/31/16.
+ *  Modem
+ *
+ * v1.0
+ *
+ * 2016-03-31
+ *
+ * This file is copyrighted By Seth Shelnutt and licensed under terms of the LGPL v2.1
+ *
  * @author Seth Shelnutt
  */
 public class Modem {

@@ -13,7 +13,15 @@ import static org.hamcrest.core.Is.is;
 import static org.junit.Assert.assertThat;
 
 /**
- * Created by seth on 4/2/16.
+ *  ModemDeviceTest
+ *
+ * v1.0
+ *
+ * 2016-04-02
+ *
+ * This file is copyrighted By Seth Shelnutt and licensed under terms of the LGPL v2.1
+ *
+ * @author Seth Shelnutt
  */
 
 @RunWith(AndroidJUnit4.class)
