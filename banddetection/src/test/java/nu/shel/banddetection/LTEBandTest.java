@@ -1,5 +1,7 @@
 package nu.shel.banddetection;
 
+import android.test.suitebuilder.annotation.SmallTest;
+
 import junit.framework.TestCase;
 
 import org.junit.Test;
@@ -8,7 +10,7 @@ import static nu.shel.banddetection.LTEBand.GetBandFromEarfcn;
 import static org.hamcrest.core.Is.is;
 import static org.junit.Assert.assertThat;
 
-public class LTEBandTest extends TestCase{
+public class LTEBandTest {
 
     @Test
     public void GetBandFromEarfcn_returnsBand41() {
@@ -17,7 +19,7 @@ public class LTEBandTest extends TestCase{
 
     @Test
     public void GetBandFromEarfcn_InvalidBandLow_returnsBand0() {
-        assertThat(GetBandFromEarfcn(-1).band, is(41));
+        assertThat(GetBandFromEarfcn(-1).band, is(0));
     }
 
     @Test
